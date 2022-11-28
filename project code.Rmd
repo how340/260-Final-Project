@@ -1,0 +1,289 @@
+---
+title: "Final project"
+author: "Hongkai Wang"
+date: "2022-11-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Loading of necessary libraries
+```{r}
+library(tidyverse)
+library(caret)
+library(ggplot2)
+library(pastecs)
+library(lmtest)
+```
+
+data source: https://www.kaggle.com/datasets/fedesoriano/heart-failure-prediction
+
+
+## data dictionaries
+
+Age: age of the patient [years]
+
+Sex: sex of the patient [M: Male, F: Female]
+
+ChestPainType: chest pain type [TA: Typical Angina, ATA: Atypical Angina, NAP: Non-Anginal Pain, ASY: Asymptomatic]
+
+RestingBP: resting blood pressure [mm Hg]
+
+Cholesterol: serum cholesterol [mm/dl]
+
+FastingBS: fasting blood sugar [1: if FastingBS > 120 mg/dl, 0: otherwise]
+
+RestingECG: resting electrocardiogram results [Normal: Normal, ST: having ST-T wave abnormality (T wave inversions and/or ST elevation or depression of > 0.05 mV), LVH: showing probable or definite left ventricular hypertrophy by Estes' criteria]
+
+MaxHR: maximum heart rate achieved [Numeric value between 60 and 202]
+
+ExerciseAngina: exercise-induced angina [Y: Yes, N: No]
+
+Oldpeak: oldpeak = ST [Numeric value measured in depression]
+
+ST_Slope: the slope of the peak exercise ST segment [Up: upsloping, Flat: flat, Down: downsloping]
+
+HeartDisease: output class [1: heart disease, 0: Normal]
+
+```{r}
+heart = read.csv("heart.csv")
+```
+
+```{r}
+heart
+summary(heart)
+```
+We can see that there is no missing data by calling the is.na method. and we can move forward with our modeling purposes. 
+
+
+### data wrangle and reformatting
+
+```{r}
+heart = heart%>% mutate(Sex = case_when(Sex == "F" ~ 0, T ~ 1)) %>% mutate(ChestPainType = case_when(ChestPainType == "TA" ~ 1, ChestPainType == "ATA" ~ 2, ChestPainType == "NAP" ~ 3, T ~ 0)) %>% mutate(RestingECG = case_when(RestingECG == "Normal" ~ 0, RestingECG == "ST" ~ 1, T ~ 2)) %>% mutate(ExerciseAngina = case_when(ExerciseAngina == "N" ~ 0, ExerciseAngina == "Y" ~ 1)) %>% mutate(ST_Slope = case_when(ST_Slope == "Up" ~ 0, ST_Slope == "Flat" ~ 1, T ~ 2)) 
+
+heart
+```
+
+Now we have no string inputs and can start to take a look at the shape of our data. 
+
+
+EDA of the categorical covariates: 
+```{r}
+ggplot(data = heart) + geom_bar(mapping = aes(x = Sex))
+```
+
+We have a lot more male in our data set than females. 
+
+```{r}
+ggplot(data = heart) + geom_bar(mapping = aes(x = ChestPainType))
+```
+
+```{r}
+ggplot(data = heart) + geom_bar(mapping = aes(x = FastingBS))
+```
+```{r}
+ggplot(data = heart) + geom_bar(mapping = aes(x = RestingECG))
+```
+
+
+```{r}
+ggplot(data = heart) + geom_bar(mapping = aes(x = ExerciseAngina))
+```
+```{r}
+ggplot(data = heart) + geom_bar(mapping = aes(x = ST_Slope))
+```
+
+
+### EDA of continous covariates. 
+
+```{r}
+ggplot(data = heart) + geom_histogram(mapping = aes(x = Age), binwidth = 1)
+ggplot(data = heart) + geom_boxplot(mapping = aes(x = Age))
+```
+
+Very nice and normal distribution of the age groups involved.  
+
+```{r}
+ggplot(data = heart) + geom_histogram(mapping = aes(x = RestingBP ), binwidth = 3)
+ggplot(data = heart) + geom_boxplot(mapping = aes(x = RestingBP))
+```
+
+we might want to normalize the resting BP as the distribution is not too normalized. 
+
+
+```{r}
+ggplot(data = heart) + geom_histogram(mapping = aes(x = Cholesterol), binwidth = 5)
+ggplot(data = heart) + geom_boxplot(mapping = aes(x = Cholesterol))
+```
+
+So there are some missing data after all. we need to determine what we want to do with the missing cholestrol data. 
+
+```{r}
+ggplot(data = heart) + geom_histogram(mapping = aes(x = MaxHR), binwidth = 3)
+ggplot(data = heart) + geom_boxplot(mapping = aes(x = MaxHR))
+```
+The max HR data is also pretty nicely normally distributed. 
+
+What we need to do next is to decide what to do with the missing data from the data set. Let's remove the rows with missing data for now for a straightforward approach with the data set. 
+### removing missing data rows
+
+```{r}
+dat = heart %>% filter(Cholesterol != 0)
+
+summary(dat)
+mean(dat)
+stat.desc(dat)
+```
+
+we still have 700 data points, which should be good enough for now. 
+
+
+### scaling of continuous data
+```{r}
+dat = dat %>% mutate(Age = scale(Age), RestingBP = scale(RestingBP), Cholesterol = scale(Cholesterol), MaxHR = scale(MaxHR))
+dat
+```
+
+### converting categorical values into factors for the model fittings. 
+
+```{r}
+dat$Sex = factor(dat$Sex)
+dat$ChestPainType = factor(dat$ChestPainType)
+dat$FastingBS = factor(dat$FastingBS)
+dat$RestingECG = factor(dat$RestingECG)
+dat$ExerciseAngina = factor(dat$ExerciseAngina)
+dat$ST_Slope = factor(dat$ST_Slope)
+```
+
+### setting up cv data set for the different machine learning models
+
+
+```{r}
+set.seed(110)
+sample = createDataPartition(dat$HeartDisease, p = 0.8, list = F)
+
+training_set = dat[sample,]
+test_set = dat[-sample,]
+
+stat.desc(training_set)
+```
+
+
+### fitting of a logistic regression model. 
+
+```{r}
+mod1 = glm(HeartDisease ~ ., data = training_set, family = "binomial")
+
+summary(mod1)
+```
+
+
+However, this is the first attempt to fitting the data, we can see that there are several good predictors in this logistic regression model. Surprisingly, cholestral is not a good predictor for heart disease, which is contrary to my preconception. I will need to single out cholesterol in the next analysis. 
+
+```{r}
+mod_c = glm(HeartDisease ~ Cholesterol, data = training_set, family = "binomial")
+
+summary(mod_c)
+```
+
+When fitted by itself, cholesterol does become significant. let's take out some of the other in-significant predictors to observe the differences. 
+
+```{r}
+mod2 = glm(HeartDisease ~ Age + Sex + ChestPainType + ExerciseAngina +ST_Slope + Cholesterol, data = training_set, family = "binomial")
+
+summary(mod2)
+
+mod2.1 = glm(HeartDisease ~ Age + Sex + ChestPainType + ExerciseAngina +ST_Slope, data = training_set, family = "binomial")
+
+summary(mod2.1)
+```
+
+Now let's check with the a nested model to see if cholesterol is a needed predictor. 
+
+```{r}
+lrtest(mod2, mod2.1)
+```
+There isn't really any difference in adding the cholesterol term, so we can drop it for now. 
+
+
+### checking model performance - logistic regression 
+
+```{r}
+pred = predict(mod2.1, test_set)
+
+predicted = case_when(pred >= .7 ~ 1, T ~ 0)
+
+confusionMatrix(as.factor(predicted),as.factor(test_set$HeartDisease))
+```
+
+We get pretty good result for the logistic regression model. But we can even fine tune our output a little bit more by playing around the classification threshold of a logistic regression. 
+
+```{r}
+pred = predict(mod2.1, test_set)
+
+predicted = case_when(pred >= .6 ~ 1, T ~ 0)
+
+confusionMatrix(as.factor(predicted),as.factor(test_set$HeartDisease))
+```
+
+
+After trying a few threshold, 0.7 gave back the best outcome. 
+
+
+
+
+### fitting a KNN model 
+
+we want to do cross validation within each iteration as well. so we need to define a train control for the model. 
+
+```{r}
+training_set$HeartDisease = factor(training_set$HeartDisease)
+```
+
+
+```{r}
+control <- trainControl(method = "cv", number = 10, p = .9)
+train_knn <- train(HeartDisease ~ ., data = training_set,
+                   method = "knn", 
+                   tuneGrid = data.frame(k = seq(3,50,2)),
+                   trControl = control)
+train_knn
+```
+
+
+```{r}
+plot(train_knn)
+```
+
+```{r}
+pred = predict(train_knn, test_set)
+confusionMatrix(as.factor(pred),as.factor(test_set$HeartDisease))
+```
+
+
+
+
+```{r}
+control <- trainControl(method="cv", number = 5)
+grid <- data.frame(mtry = c(1, 5, 10, 25))
+
+
+train_rf <- train(HeartDisease ~ ., data = training_set,
+                   method = "rf", 
+                  ntree = 150,
+                   tuneGrid = grid,
+                   trControl = control)
+train_rf
+
+
+
+```
+
+```{r}
+pred = predict(train_rf, test_set)
+confusionMatrix(as.factor(pred),as.factor(test_set$HeartDisease))
+```
+
+
