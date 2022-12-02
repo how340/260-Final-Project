@@ -50,6 +50,17 @@ HeartDisease: output class [1: heart disease, 0: Normal]
 ```{r}
 heart = read.csv("heart.csv")
 ```
+### converting categorical values into factors for the model fittings. 
+```{r, echo = F}
+# factoring the categorical values for easy
+heart$Sex = factor(heart$Sex)
+heart$ChestPainType = factor(heart$ChestPainType)
+heart$FastingBS = factor(heart$FastingBS)
+heart$RestingECG = factor(heart$RestingECG)
+heart$ExerciseAngina = factor(heart$ExerciseAngina)
+heart$ST_Slope = factor(heart$ST_Slope)
+heart$HeartDisease = factor(heart$HeartDisease)
+```
 
 ```{r}
 heart
@@ -69,72 +80,32 @@ heart
 Now we have no string inputs and can start to take a look at the shape of our data. 
 
 
-EDA of the categorical covariates: 
+### EDA of the categorical covariates: 
 ```{r}
-ggplot(data = heart) + geom_bar(mapping = aes(x = Sex))
-```
+cat = heart %>% select(Sex, ChestPainType, FastingBS, RestingECG, ExerciseAngina, ST_Slope, HeartDisease)
+cat_long = cat %>% pivot_longer(colnames(cat)) %>% as.data.frame()
 
-We have a lot more male in our data set than females. 
-
-```{r}
-ggplot(data = heart) + geom_bar(mapping = aes(x = ChestPainType))
+cat_long %>% ggplot(aes(value)) + geom_bar() + facet_wrap(~ name, scales = "free") + ggtitle("Distribution of Categorical Covariates")
 ```
-
-```{r}
-ggplot(data = heart) + geom_bar(mapping = aes(x = FastingBS))
-```
-```{r}
-ggplot(data = heart) + geom_bar(mapping = aes(x = RestingECG))
-```
-
-
-```{r}
-ggplot(data = heart) + geom_bar(mapping = aes(x = ExerciseAngina))
-```
-```{r}
-ggplot(data = heart) + geom_bar(mapping = aes(x = ST_Slope))
-```
-
 
 ### EDA of continous covariates. 
 
 ```{r}
-ggplot(data = heart) + geom_histogram(mapping = aes(x = Age), binwidth = 1)
-ggplot(data = heart) + geom_boxplot(mapping = aes(x = Age))
+num = heart %>% select(Age, RestingBP, Cholesterol, MaxHR, Oldpeak)
+num_long = num %>% pivot_longer(colnames(num)) %>% as.data.frame()
+
+num_long %>% ggplot(aes(value)) + geom_histogram(bins = 20) + facet_wrap(~ name, scales = "free") + ggtitle("Distribution of Numerical Continuous Covariates")
 ```
 
-Very nice and normal distribution of the age groups involved.  
-
-```{r}
-ggplot(data = heart) + geom_histogram(mapping = aes(x = RestingBP ), binwidth = 3)
-ggplot(data = heart) + geom_boxplot(mapping = aes(x = RestingBP))
-```
-
-we might want to normalize the resting BP as the distribution is not too normalized. 
-
-
-```{r}
-ggplot(data = heart) + geom_histogram(mapping = aes(x = Cholesterol), binwidth = 5)
-ggplot(data = heart) + geom_boxplot(mapping = aes(x = Cholesterol))
-```
-
-So there are some missing data after all. we need to determine what we want to do with the missing cholestrol data. 
-
-```{r}
-ggplot(data = heart) + geom_histogram(mapping = aes(x = MaxHR), binwidth = 3)
-ggplot(data = heart) + geom_boxplot(mapping = aes(x = MaxHR))
-```
 The max HR data is also pretty nicely normally distributed. 
 
 What we need to do next is to decide what to do with the missing data from the data set. Let's remove the rows with missing data for now for a straightforward approach with the data set. 
 ### removing missing data rows
 
 ```{r}
-dat = heart %>% filter(Cholesterol != 0)
+dat = heart %>% filter(Cholesterol != 0) %>% as.data.frame()
 
 summary(dat)
-mean(dat)
-stat.desc(dat)
 ```
 
 we still have 700 data points, which should be good enough for now. 
@@ -146,16 +117,25 @@ dat = dat %>% mutate(Age = scale(Age), RestingBP = scale(RestingBP), Cholesterol
 dat
 ```
 
-### converting categorical values into factors for the model fittings. 
+
+
+
+### final distribution of data
 
 ```{r}
-dat$Sex = factor(dat$Sex)
-dat$ChestPainType = factor(dat$ChestPainType)
-dat$FastingBS = factor(dat$FastingBS)
-dat$RestingECG = factor(dat$RestingECG)
-dat$ExerciseAngina = factor(dat$ExerciseAngina)
-dat$ST_Slope = factor(dat$ST_Slope)
+cat = dat %>% select(Sex, ChestPainType, FastingBS, RestingECG, ExerciseAngina, ST_Slope, HeartDisease)
+cat_long = cat %>% pivot_longer(colnames(cat)) %>% as.data.frame()
+
+cat_long %>% ggplot(aes(value)) + geom_bar() + facet_wrap(~ name, scales = "free") + ggtitle("Distribution of Categorical Covariates")
 ```
+
+```{r}
+num = dat %>% select(Age, RestingBP, Cholesterol, MaxHR)
+num_long = num %>% pivot_longer(colnames(num)) %>% as.data.frame()
+
+num_long %>% ggplot(aes(value)) + geom_histogram(bins = 20) + facet_wrap(~ name, scales = "free") + ggtitle("Distribution of Numerical Continuous Covariates")
+```
+
 
 ### setting up cv data set for the different machine learning models
 
@@ -168,6 +148,22 @@ training_set = dat[sample,]
 test_set = dat[-sample,]
 
 stat.desc(training_set)
+```
+
+
+```{r}
+cat = training_set %>% select(Sex, ChestPainType, FastingBS, RestingECG, ExerciseAngina, ST_Slope, HeartDisease)
+cat_long = cat %>% pivot_longer(colnames(cat)) %>% as.data.frame()
+
+cat_long %>% ggplot(aes(value)) + geom_bar() + facet_wrap(~ name, scales = "free") + ggtitle("Distribution of Categorical Covariates")
+```
+
+```{r}
+
+num = training_set %>% select(Age, RestingBP, Cholesterol, MaxHR)
+num_long = num %>% pivot_longer(colnames(num)) %>% as.data.frame()
+
+num_long %>% ggplot(aes(value)) + geom_histogram(bins = 20) + facet_wrap(~ name, scales = "free") + ggtitle("Distribution of Numerical Continuous Covariates")
 ```
 
 

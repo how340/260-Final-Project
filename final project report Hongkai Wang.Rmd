@@ -1,0 +1,191 @@
+---
+title: "Final project output"
+author: "Hongkai Wang"
+date: "2022-11-30"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo = F, results = 'hide', message=FALSE, warning=FALSE}
+# loading necessary libraries
+library(tidyverse)
+library(caret)
+library(ggplot2)
+library(pastecs)
+library(lmtest)
+library(Hmisc)
+```
+
+# Introduction
+
+Heart disease is the leading cause of death for all demographic groups in the United States. On average, one person would die from some form of cardiovascular conditions every 34 seconds, and heart diseases account for one out of every 5 deaths in the US in 2020. Given the severity and prevalence of heart diseases in the United States, it is important to develop accurate diagnostic approaches and provide strong guidance in the prevention, treatment, and recovery of heart diseases. One of the possible way of improving the diagnostic process and providing accurate prevention measures is by utilizing machine learning algorithms to predict the development of heart diseases given relevant clinical parameters. In this project, I will attempt to create multiple machine learning models that could predict the presence of heart diseases based on several common clinical measurements. 
+
+A data set was sourced from a page named [Heart Failure Prediction Dataset](https://www.kaggle.com/datasets/fedesoriano/heart-failure-prediction). The data set contains 11 common clinical features related to cardiovascular health on a total of 918 patients. The patient information were compiled from a collection of heart disease data sets posted on the [UCI Machine Learning Repository](https://archive.ics.uci.edu/ml/machine-learning-databases/heart-disease/). This data set contains information sourced from Cleveland, Hungarian, Switzerland, Long Beach VA, and Stalog, and could be considered as a comprehensive description of global heart diseases with a fairly small data set. Attempts were made to increase the size of the available data, however, there is limited publications with detailed patients data. The current data set used for the project was the largest data set I was able to acquire. 
+
+The data set is composed of 11 clinical parameters and 1 target feature indicating the presence of heart diseases in a particular patient sample. The 11 clinical features include: age, sex, type of chest pain experience (includes Typical Angina, Atypical Angina, Non-Angina pain, no chest pain), resting blood pressure, level of serum cholesterol measured in millimeters of Mercury, level of fasting blood suger (denoted 1 if fasting blood suger >= 120 mg/dl, 0 otherwise), resting electrocardiogram results (categorized by Normal, ST-T wave abnormal, Left Ventricular Hypertrophy), maximum heart rate achieved, presence of exercise-induced angina (reported as yes or no ), numerical value of ST value (denoted as old peak), slope of peak exercise ST segment (defined as upsloping, flat, or downsloping). There is a total of 6 categorical predictor covariates, and 5 continous numerical predictor covariates. Here is a name of each column defined in the data set, in the order shown above. 
+
+```{r, echo = F}
+heart = read.csv("heart.csv")
+colnames(heart)
+```
+
+Data transformation was conducted on all categorical covariates into the following numerical coding. 
+
+1. sex: female = 0, male = 1
+2. ChestPainType: Asymptomatic = 0, 
+3. RestingECG: Normal = 0, ST = 1, LVH = 2
+4. ExerciseAngina: N = 0, Y = 1
+5. ST_Slope: up = 0, flat = 1, down = 2
+
+```{r, echo = F}
+# number coding categorical predictors
+heart = heart%>% mutate(Sex = case_when(Sex == "F" ~ 0, T ~ 1)) %>% mutate(ChestPainType = case_when(ChestPainType == "TA" ~ 1, ChestPainType == "ATA" ~ 2, ChestPainType == "NAP" ~ 3, T ~ 0)) %>% mutate(RestingECG = case_when(RestingECG == "Normal" ~ 0, RestingECG == "ST" ~ 1, T ~ 2)) %>% mutate(ExerciseAngina = case_when(ExerciseAngina == "N" ~ 0, ExerciseAngina == "Y" ~ 1)) %>% mutate(ST_Slope = case_when(ST_Slope == "Up" ~ 0, ST_Slope == "Flat" ~ 1, T ~ 2)) 
+```
+
+```{r, echo = F}
+# factoring the categorical values for easy
+heart$Sex = factor(heart$Sex)
+heart$ChestPainType = factor(heart$ChestPainType)
+heart$FastingBS = factor(heart$FastingBS)
+heart$RestingECG = factor(heart$RestingECG)
+heart$ExerciseAngina = factor(heart$ExerciseAngina)
+heart$ST_Slope = factor(heart$ST_Slope)
+heart$HeartDisease = factor(heart$HeartDisease)
+```
+
+Bar graphs were constructed to reveal the distribution of the categorical predictor covariates. The results shows that the binary outcome of heart diseases is balanced, and there is not need for re sampling to balance the data set. There are two categories that is somewhat concerning, we see that ChestPainType and ST slope both have categories that has less than 100 samples in their categories. However, since they are not the outcome classification, I will hold off on changing any of the existing data set.  
+
+```{r, echo = F}
+cat = heart %>% select(Sex, ChestPainType, FastingBS, RestingECG, ExerciseAngina, ST_Slope, HeartDisease)
+cat_long = cat %>% pivot_longer(colnames(cat)) %>% as.data.frame()
+
+cat_long %>% ggplot(aes(value)) + geom_bar() + facet_wrap(~ name, scales = "free") + ggtitle("Distribution of Categorical Covariates")
+```
+
+Histograms were constructed to reveal the distribution of the continuous numerical variables. Age, MaxHR, and restingBP all appear to be normally distributed with only a few outlier. There is a significant amount of 0 values in the cholesterol categories, and that was deemed to be missing data for some samples. These missing data will be removed from the machine learning analysis due to a lack of information on possible ways to fill these in. A possible approach is to fill the data with some form of regression analysis. However, that could affect our classification of heart disease, as there is no clear explanation on underlying reason for missing data. At the same time, we see that the old peak covariates is mostly 0, probably due to the fact that it is a data not collected in all of the source studies. Thus, I decided to exclude old peak from further analysis. 
+
+```{r, echo = F}
+num = heart %>% select(Age, RestingBP, Cholesterol, MaxHR, Oldpeak)
+num_long = num %>% pivot_longer(colnames(num)) %>% as.data.frame()
+
+num_long %>% ggplot(aes(value)) + geom_histogram(bins = 20) + facet_wrap(~ name, scales = "free") + ggtitle("Distribution of Numerical Continuous Covariates")
+```
+
+Further analysis of the data shows that most of the missing data are heart disease patients, and data filling techniques could result in bias in our classification model. Thus, data samples with missing cholesterol levels are removed from the data set.
+
+```{r, echo = F, fig.dim = c(4, 3)}
+heart %>% filter(Cholesterol == 0) %>% select(HeartDisease) %>% ggplot(aes(HeartDisease)) + geom_bar()+ ggtitle("Classification missing cholesterol levels")
+```
+
+Another round of EDA was conducted after removing the missing values, and no significant changes ind data distribution was observed. Normalization was then conducted on the continuous variables to achieve better machine learning out comes. The plots for the final distribution of the data is included in the appendix. 
+
+```{r, echo = F}
+dat = heart %>% filter(Cholesterol != 0)
+dat = dat %>% mutate(Age = scale(Age), RestingBP = scale(RestingBP), Cholesterol = scale(Cholesterol), MaxHR = scale(MaxHR)) %>% select(-Oldpeak)
+
+```
+
+## Methods
+
+This project will utilize several machine learning classification methods to conduct predictions on the presence of heart disease based on the clinical parameters. Cross validations will be conducted before testing of the machine learning algorithms to create test and train data sets. Cross validation is essential in effective machine learning as it can significantly reduce overfitting and gives us a proper approach of evaluating our fitted models. There are several machine learning algorithms that could be useful for this project. A logistic regression model provides a foundation and baseline for our project. Logistic regression is chosen as it is one of the tried and true methods for classifying binary outcomes. The excellent explainability of the model provides important insight into the factors that has a strong influence on heart diseases. K-Nearest Neighbor is another helpful algorithm in data classification through data clustering. This method is used due to ease of fitting a model, and easy hyper parameter tuning with the value of k. Random forest is another helpful ML algorithm for this project. Random forests utilizes bagging in regression trees to reduce the usual issue of high variance in decision trees. 
+
+In summary, the three methods that I have chosen for this project, logistic regression, KNN, and random forests, cover three distinct type of classification methods, which are regression analysis, clustering, and decision tree based classification. It is a goal of this project to explore the advantage and disadvantage of utilizing different types of machine learning algorithms for medical data. 
+
+# Results 
+
+A training-test 8:2 data split was conducted before any model fitting processes. There was no significant deviation from the distribution of the original data set. Visual inspection of the data distribution is included in the code section. 
+
+```{r, echo = F}
+set.seed(110)
+sample = createDataPartition(dat$HeartDisease, p = 0.8, list = F)
+
+training_set = dat[sample,]
+test_set = dat[-sample,]
+
+```
+
+
+## logisitc regression
+
+A logistic regression model was first fitted onto the training data. Different combination of the covariates were tested for a best fitted model, and several covariates didn't produce a statistically significant fit for our model. Several classification threshold for the probability output is also tested. Interestingly, cholesteral was proven to be a insignificant predictor within the full model, but it is a significant predictor in a reduced model consisted only of itself. This possibility due to a stronger predictive power from other covariates that contains similar information to the cholesterol level. As a result, cholesterol was not included in the final model. The full model summary of the final model is shown below
+
+```{r, echo = F }
+mod2.1 = glm(HeartDisease ~ Age + Sex + ChestPainType + ExerciseAngina +ST_Slope, data = training_set, family = "binomial")
+
+summary(mod2.1)
+```
+
+We can explore the predictability of the model by looking at the confusion matrix comparing the prediction outcomes of the test data set. 
+
+```{r, echo = F}
+pred = predict(mod2.1, test_set)
+
+predicted = case_when(pred >= .3 ~ 1, T ~ 0)
+
+confuse = confusionMatrix(as.factor(predicted),as.factor(test_set$HeartDisease), mode = "everything")
+
+confuse$table
+confuse$overall
+```
+
+From the confusion matrix output, we see that logistic regression model achieves an respectable accuracy of 86.5%. However, the model is very likely to make false negative predictions, meaning that we have a fairly low recall score. From a clinical point of view, this is not very helpful as false negative will do significant damage to the diagnostic prediction process. On the other hand, false positive is not as bad, as further diagnosis by a physician could clear up confusion and perhaps serve as precautionary tale for the patients. One way to increase the recall of the model is to lower the classification threshold. However, in this case, even with the classification threshold set to 0.1, we are still getting a false positive rate of 0.13. Thus, the logistic regression might not be the most appropriate model of choice here for predicting the presence of heart disease. 
+
+
+## K-Nearest Neighbor
+
+Next, we are going to see if clustering methods provide a better result when compared to the logistic regression model. The K-Nearest neighbor model was established with an internal cross validation process and the test/train ratio was set to 1:9. All 10 remaining covariates were fed into the model in the hopes of finding new correlations between the clinical parameters and heart diseases. However, comparison of different input parameters shows that it is better to stick with the covariates that was significant in the previous logistic regression model and we can achieve better model accuracy. K values ranging from 3 to 50 were used to create different KNN models.  
+```{r, echo = F}
+set.seed(100)
+control <- trainControl(method = "cv", number = 10, p = .9)
+train_knn <- train(HeartDisease ~ Age + Sex + ChestPainType + ExerciseAngina +ST_Slope, data = training_set,
+                   method = "knn", 
+                   tuneGrid = data.frame(k = seq(3,50,1)),
+                   trControl = control)
+plot(train_knn)
+```
+
+We can see that the highest accuracy of the model is obtained at K = 8, and any further clustering would only increase the noise in the model and reduce accuracy. Now let's evaluate the model outcome with the confusion matrix again. 
+
+```{r, echo = F}
+pred = predict(train_knn, test_set)
+confuse = confusionMatrix(as.factor(pred),as.factor(test_set$HeartDisease), mode = "everything")
+
+confuse$table
+confuse$overall
+```
+
+We can see that the KNN method has a similar overall accuracy to the logistic regression model. However, we see some improvement in the recall of the model. In a clinical setting, this model outcome is more preferable than the logistic regression model. A lower false negative rate would result in a lower number of missed heart diseases. 
+
+## Random Forest
+
+
+```{r, echo = F, warning= F}
+control <- trainControl(method="cv", number = 5)
+grid <- data.frame(mtry = c(1, 5, 10, 25))
+
+
+train_rf <- train(HeartDisease ~ ., data = training_set,
+                   method = "rf", 
+                  ntree = 150,
+                   tuneGrid = grid,
+                   trControl = control)
+train_rf
+
+
+
+```
+
+```{r, echo = F}
+pred = predict(train_rf, test_set)
+confuse = confusionMatrix(as.factor(pred),as.factor(test_set$HeartDisease), mode = "everything")
+
+confuse$table
+confuse$overall
+```
+
+
