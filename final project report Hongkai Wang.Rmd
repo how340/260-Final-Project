@@ -264,6 +264,10 @@ At the same time, there are several improvements that could be made to this proj
 2. The data set have some issue with the definition of the data feature. A better understanding of cardiovascular disease and symptom will benefit the model prediction significantly. However, due to the time restraints of the model, no outside consult was made during the development of the project. 
 3. Other machine learning algorithms could be explored given a more extended time. One of the useful model that I can use is XGBoost. XGBoost is a boosting decision tree method that handles missing data very well. I would love to explore the performance of XGBoost in the future on the same data set, and see if a higher performing model could be made. 
 
+# Reference 
+
+1. Kaggle data source: https://www.kaggle.com/datasets/fedesoriano/heart-failure-prediction
+2. CDC report on heart attack stats. [**click link here**](https://www.cdc.gov/heartdisease/facts.htm#:~:text=In%20the%20United%20States%2C%20someone,heart%20attack%20every%2040%20seconds.&text=Every%20year%2C%20about%20805%2C000%20people,States%20have%20a%20heart%20attack.&text=Of%20these%2C,are%20a%20first%20heart%20attack)
 
 # Appendix 
 
