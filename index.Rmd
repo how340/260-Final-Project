@@ -1,10 +1,9 @@
 ---
-title: "Final project output"
+title: "Final project"
 author: "Hongkai Wang"
 date: "2022-11-30"
 output:
-  pdf_document: default
-  html_document: default
+  default: pdf_document
 ---
 
 ```{r setup, include=FALSE}
